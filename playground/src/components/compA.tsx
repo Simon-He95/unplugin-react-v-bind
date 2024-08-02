@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import CompA from '../components/compA.tsx'
 import './index.css'
 
 export default function () {
-  const [_color, setColor] = useState<string>('red')
+  const [_color, setColor] = useState<string>('yellow')
 
   function clickHandler() {
     // 生成一个 随机颜色
@@ -16,20 +15,6 @@ export default function () {
       <div className="aa" onClick={() => clickHandler()}>
         <div className="bindColor">click to random color</div>
         <div className="bindBgColor">click to random background-color</div>
-        asdsa
-      </div>
-      <div>
-        <div className="xxx">xxx</div>
-        <div className="xxx">xxx</div>
-        asdsadas
-      </div>
-      adsad
-      <div>asdasds</div>
-      <div style={{ padding: '15px' }}>
-        <h3>CompA:</h3>
-        <div>
-          <CompA></CompA>
-        </div>
       </div>
     </>
   )

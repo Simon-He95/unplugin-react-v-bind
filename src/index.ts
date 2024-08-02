@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { UnpluginFactory } from 'unplugin'
 import { createUnplugin } from 'unplugin'
+import MagicString from 'magic-string'
 import type { Options } from './types'
 import { PLUGIN_NAME } from './constant'
 import { hash } from './utils'
@@ -94,9 +95,20 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
             `const styleSheet = Array.from(document.styleSheets).find(sheet => sheet.ownerNode.getAttribute('react-v-bind'));`,
             `const newStyleSheet = document.createElement('style');`,
             `newStyleSheet.setAttribute('react-v-bind', 'true');`,
-            `newStyleSheet.innerHTML = \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\`;`,
             `if (styleSheet) {`,
+            // 可能是不同文件的变量,所以通过判断,相同 hash 覆盖, 不同追加
+            `   if(styleSheet.ownerNode.innerHTML.includes('[v-bind-id="${fileNameHash}"]')) {`,
+            `     newStyleSheet.innerHTML = styleSheet.ownerNode.innerHTML.replace(/\\[v-bind-id="${fileNameHash}"\\] { [^}]+ }/, \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\`);`,
+            `   }`,
+            `   else {`,
+            // 要包含原本的 styleSheet 内容
+            `     newStyleSheet.innerHTML += styleSheet.ownerNode.innerHTML + \`\n[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; };\``,
+            `     console.log({newStyleSheet})`,
+            `   }`,
             `  document.head.removeChild(styleSheet.ownerNode);`,
+            `}`,
+            `else {`,
+            `   newStyleSheet.innerHTML = \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\`;`,
             `}`,
             `document.head.appendChild(newStyleSheet);`,
             `}, [${useStateMatch[2]}])`,
@@ -137,7 +149,17 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
           code = code.replace(useRefMatch[0], `${useRefMatch[0]}\n${insertCode}`)
         }
       })
-      return code
+      const s = new MagicString(code)
+      const mappings = [s.generateMap({ hires: true, source: id })]
+      return {
+        code,
+        map: JSON.stringify({
+          file: id,
+          mappings,
+          sources: [code],
+          version: 3,
+        }),
+      }
     },
   }
 }
