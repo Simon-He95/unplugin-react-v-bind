@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true
+  },
+  "vueCompilerOptions": {
+    "plugins": [
+      "@vue-macros/volar",
+      "volar-plugin-ignore-attributes"
+    ],
+    "vueMacros": {
+      "scriptSFC": true
+    },
+    "ignoreAttributes": {
+      "include": ["wfull"]
+    }
+  },
+  "include": ["vite.config.ts"]
+}

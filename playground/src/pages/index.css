@@ -1,0 +1,3 @@
+.bindColor{
+    color: v-bind(_color); /* color: var(--color)*/
+}
