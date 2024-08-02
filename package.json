@@ -1,5 +1,5 @@
 {
-  "name": "unplugin-starter",
+  "name": "unplugin-react-v-bind",
   "type": "module",
   "version": "0.0.1",
   "packageManager": "pnpm@7.33.7",

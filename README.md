@@ -1,4 +1,28 @@
-## Unplugin Starter
+## unplugin-react-v-bind
+在 React 中支持 `v-bind` 语法
+
+## Install
+
+```bash
+npm i unplugin-react-v-bind -D
+```
+
+## Usage
+
+```ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import VitePluginReactVBind from 'unplugin-react-v-bind/vite'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [
+    VitePluginReactVBind(),
+    react(),
+  ],
+
+})
+```
 
 ## :coffee:
 

@@ -1,1 +1,1 @@
-export const PLUGIN_NAME = 'unplugin-starter'
+export const PLUGIN_NAME = 'unplugin-react-v-bind'
