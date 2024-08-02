@@ -4,8 +4,10 @@ import type { UnpluginFactory } from 'unplugin'
 import { createUnplugin } from 'unplugin'
 import type { Options } from './types'
 import { PLUGIN_NAME } from './constant'
+import { hash } from './utils'
 
-export const unpluginFactory: UnpluginFactory<Options | undefined> = (options) => {
+// support for other css language ?🤔
+export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
   const importCss_RE = /import\s+['"](.+\.css)['"]/
   const importReact_RE = /import\s+(?:\w+,\s*)?\{([^}]+)\}\s+from\s+['"]react["']/
   const needTransformedCssMap = new Set()
@@ -19,7 +21,7 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = (options) =
         if (!needTransformedCssMap.has(id))
           return
 
-        const newCssContent = code.replace(/v-bind\(([^)]+)\)/g, (match, args) => {
+        const newCssContent = code.replace(/v-bind\(([^)]+)\)/g, (_, args) => {
           // 可能有默认值
           const [cssVar, cssDefault] = args.split(',')
           return cssDefault
@@ -49,12 +51,13 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = (options) =
       // 注入 fileName 的 hash 值
       // 如果 return 顶层不是 Fragment, 则直接在后面注入, 否则要给 children 下的每一个元素注入
       const fileNameHash = hash(absoulteUrl)
-      const fragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?jsxDEV\(Fragment,\s*\{.*children/)
+      // 当打包时候就不再是 jsxDEV 而是 jsxs
+      const fragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?(?:jsxDEV|jsxs)\(Fragment,\s*\{.*children/)
       if (fragmentMatch) {
         // const fragmentMatch
         const changed = code.slice(fragmentMatch.index! + fragmentMatch[0].length).replace(/children:\s*(?:\[((?:[^[\]]|\[[^[\]]*\])*)\]|"[^"]*"|(?:\/\* @__PURE__ \*\/\s*)?jsxDEV\(((?:[^()]|\([^()]*\))*)\))/g, _ => ' '.repeat(_.length))
         let offset = 0
-        for (const changedMatch of changed.matchAll(/(?:\/\* @__PURE__ \*\/)?\s*jsxDEV\([^,]+,\s*\{/g)) {
+        for (const changedMatch of changed.matchAll(/(?:\/\* @__PURE__ \*\/)?\s*(?:jsxDEV|jsxs)\([^,]+,\s*\{/g)) {
           const pos = fragmentMatch.index! + fragmentMatch[0].length + changedMatch.index! + changedMatch[0].length + offset
           const changedText = ` 'v-bind-id': '${fileNameHash}',`
           offset += changedText.length
@@ -62,7 +65,7 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = (options) =
         }
       }
       else {
-        const notFragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?jsxDEV\([^,]+,\s*\{/)
+        const notFragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?(?:jsxDEV|jsxs)\([^,]+,\s*\{/)
         if (notFragmentMatch) {
           code = code.replace(notFragmentMatch[0], `${notFragmentMatch[0]} 'v-bind-id': '${fileNameHash}',`)
         }
@@ -139,17 +142,6 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = (options) =
   }
 }
 
-function hash(str: string) {
-  let i
-  let l
-  let hval = 0x811C9DC5
-
-  for (i = 0, l = str.length; i < l; i++) {
-    hval ^= str.charCodeAt(i)
-    hval += (hval << 1) + (hval << 4) + (hval << 7) + (hval << 8) + (hval << 24)
-  }
-  return `00000${(hval >>> 0).toString(36)}`.slice(-6)
-}
 export const unplugin = /* #__PURE__ */ createUnplugin(unpluginFactory)
 
 export default unplugin
