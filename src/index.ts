@@ -36,6 +36,7 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
       if (!cssMatch) {
         return
       }
+
       const url = cssMatch[1]
       const absoulteUrl = path.resolve(path.dirname(id), url)
       const cssContent = await fsp.readFile(absoulteUrl, 'utf-8')
@@ -51,14 +52,14 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
       needTransformedCssMap.add(absoulteUrl)
       // 注入 fileName 的 hash 值
       // 如果 return 顶层不是 Fragment, 则直接在后面注入, 否则要给 children 下的每一个元素注入
-      const fileNameHash = hash(absoulteUrl)
+      const fileNameHash = hash(id)
       // 当打包时候就不再是 jsxDEV 而是 jsxs
-      const fragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?(?:jsxDEV|jsxs)\(Fragment,\s*\{.*children/)
+      const fragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?(?:jsxDEV|jsxs?)\(Fragment,\s*\{.*children/)
       if (fragmentMatch) {
         // const fragmentMatch
         const changed = code.slice(fragmentMatch.index! + fragmentMatch[0].length).replace(/children:\s*(?:\[((?:[^[\]]|\[[^[\]]*\])*)\]|"[^"]*"|(?:\/\* @__PURE__ \*\/\s*)?jsxDEV\(((?:[^()]|\([^()]*\))*)\))/g, _ => ' '.repeat(_.length))
         let offset = 0
-        for (const changedMatch of changed.matchAll(/(?:\/\* @__PURE__ \*\/)?\s*(?:jsxDEV|jsxs)\([^,]+,\s*\{/g)) {
+        for (const changedMatch of changed.matchAll(/(?:\/\* @__PURE__ \*\/)?\s*(?:jsxDEV|jsxs?)\([^,]+,\s*\{/g)) {
           const pos = fragmentMatch.index! + fragmentMatch[0].length + changedMatch.index! + changedMatch[0].length + offset
           const changedText = ` 'v-bind-id': '${fileNameHash}',`
           offset += changedText.length
@@ -66,7 +67,7 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
         }
       }
       else {
-        const notFragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?(?:jsxDEV|jsxs)\([^,]+,\s*\{/)
+        const notFragmentMatch = code.match(/return\s+(?:\/\* @__PURE__ \*\/\s*)?(?:jsxDEV|jsxs?)\([^,]+,\s*\{/)
         if (notFragmentMatch) {
           code = code.replace(notFragmentMatch[0], `${notFragmentMatch[0]} 'v-bind-id': '${fileNameHash}',`)
         }
@@ -102,13 +103,13 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
             `   }`,
             `   else {`,
             // 要包含原本的 styleSheet 内容
-            `     newStyleSheet.innerHTML += styleSheet.ownerNode.innerHTML + \`\n[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; };\``,
+            `     newStyleSheet.innerHTML += styleSheet.ownerNode.innerHTML + \`\n[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\``,
             `     console.log({newStyleSheet})`,
             `   }`,
             `  document.head.removeChild(styleSheet.ownerNode);`,
             `}`,
             `else {`,
-            `   newStyleSheet.innerHTML = \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\`;`,
+            `   newStyleSheet.innerHTML = \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\``,
             `}`,
             `document.head.appendChild(newStyleSheet);`,
             `}, [${useStateMatch[2]}])`,

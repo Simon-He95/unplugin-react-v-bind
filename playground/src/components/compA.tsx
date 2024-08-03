@@ -12,6 +12,7 @@ export default function () {
 
   return (
     <>
+      <h3>CompA</h3>
       <div className="aa" onClick={() => clickHandler()}>
         <div className="bindColor">click to random color</div>
         <div className="bindBgColor">click to random background-color</div>
