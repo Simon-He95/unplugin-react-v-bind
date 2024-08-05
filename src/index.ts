@@ -5,15 +5,14 @@ import { createUnplugin } from 'unplugin'
 import MagicString from 'magic-string'
 import type { Options } from './types'
 import { PLUGIN_NAME } from './constant'
-import { hash } from './utils'
+import { generateInsertCode, hash, importCss_RE } from './utils'
 
 // support for other css language ?🤔
 export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
-  const importCss_RE = /import\s+['"]([./].+\.css)['"]/g /* 只处理相对路径的 css 文件 */
-  const importReact_RE = /import\s+(?:\w+,\s*)?\{([^}]+)\}\s+from\s+['"]react["']/
   const needTransformedCssMap = new Set()
   return {
     name: PLUGIN_NAME,
+    enforce: 'post',
     transformInclude(id) {
       return id.endsWith('.tsx') || id.endsWith('.css')
     },
@@ -21,7 +20,6 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
       if (id.endsWith('.css')) {
         if (!needTransformedCssMap.has(id))
           return
-
         const newCssContent = code.replace(/v-bind\(([^)]+)\)/g, (_, args) => {
           // 可能有默认值
           const [cssVar, cssDefault] = args.split(',')
@@ -35,8 +33,8 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
 
       for (const cssMatch of code.matchAll(importCss_RE)) {
         const url = cssMatch[1]
-        const absoulteUrl = path.resolve(path.dirname(id), url)
-        const cssContent = await fsp.readFile(absoulteUrl, 'utf-8')
+        const absoluteUrl = path.resolve(path.dirname(id), url)
+        const cssContent = await fsp.readFile(absoluteUrl, 'utf-8')
         // 如果没使用 v-bind 语法,直接返回
         if (!/v-bind\(/.test(cssContent))
           continue
@@ -46,7 +44,7 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
           vbindMap.add(cssVar)
         }
 
-        needTransformedCssMap.add(absoulteUrl)
+        needTransformedCssMap.add(absoluteUrl)
       }
 
       if (vbindMap.size === 0)
@@ -76,85 +74,25 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
       }
       // 查找使用 vbindMap 中的变量的语句 useState 或者 useRef
       Array.from(vbindMap).forEach((vbind) => {
-        const dynamicUseState_RE = new RegExp(`(\\s*)(?:const|let|var)\\s+\\[(${vbind})\\s*,\\s*[^\\]]*\\]\\s*=\\s*useState\\([^)]*\\)`)
+        const type = 'useState'
+        const dynamicUseState_RE = new RegExp(`(\\s*)(?:const|let|var)\\s+\\[(${vbind})\\s*,\\s*[^\\]]*\\]\\s*=\\s*${type}\\([^)]*\\)`)
         const useStateMatch = code.match(dynamicUseState_RE)
         if (useStateMatch) {
           // 在顶部依赖中添加 useEffect
-          const importMatch = code.match(importReact_RE)
-          if (importMatch) {
-            // 判断 {} 中是否有 useEffect, 有则不处理, 无则追加
-            if (!importMatch[1].includes('useEffect')) {
-              code = code.replace(importMatch[0], importMatch[0].replace(importMatch[1], ` ${importMatch[1].trim()}, useEffect `))
-            }
-          }
-          else {
-            // 在第一行追加 import { useEffect } from 'react'
-            code = `import { useEffect } from 'react'\n${code}`
-          }
-          // 找到在该行代码后一行追加代码
-          const space = useStateMatch[1]
-          // 不希望通过 style 去设置, 而是通过 styleSheet 去设置
-          const insertCode = `${space.replace('\n', '')}useEffect(() => {${space}  ${[
-            `const styleSheet = Array.from(document.styleSheets).find(sheet => sheet.ownerNode.getAttribute('react-v-bind'));`,
-            `const newStyleSheet = document.createElement('style');`,
-            `newStyleSheet.setAttribute('react-v-bind', 'true');`,
-            `if (styleSheet) {`,
-            `   if(styleSheet.ownerNode.innerHTML.includes('[v-bind-id="${fileNameHash}"]')) {`,
-            `     newStyleSheet.innerHTML = styleSheet.ownerNode.innerHTML.replace(/\\[v-bind-id="${fileNameHash}"\\] { [^}]+ }/, \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\`);`,
-            `   }`,
-            `   else {`,
-            `     newStyleSheet.innerHTML += styleSheet.ownerNode.innerHTML + \`\n[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\``,
-            `   }`,
-            `  document.head.removeChild(styleSheet.ownerNode);`,
-            `}`,
-            `else {`,
-            `   newStyleSheet.innerHTML = \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useStateMatch[2]}}; }\``,
-            `}`,
-            `document.head.appendChild(newStyleSheet);`,
-            `}, [${useStateMatch[2]}])`,
-          ].join(`${space}  `)}`
-          code = code.replace(useStateMatch[0], `${useStateMatch[0]}\n${insertCode}`)
+          code = generateInsertCode(code, vbind, fileNameHash, useStateMatch, type)
         }
         else {
+          /**
+           * 似乎 useRef 并不会触发 useEffect, 所以这里不处理
+           */
           // useRef
-          const dynamigcUseRef_RE = new RegExp(`(\\s*)(?:const|let|var)\\s+(${vbind})\\s*=\\s*useRef\\([]\\)`)
-          const useRefMatch = code.match(dynamigcUseRef_RE)
-          if (!useRefMatch)
-            return
-          // 在顶部依赖中添加 useEffect
-          const importMatch = code.match(importReact_RE)
-          if (importMatch) {
-            // 判断 {} 中是否有 useRef, 有则不处理, 无则追加
-            if (!importMatch[1].includes('useRef')) {
-              code = code.replace(importMatch[0], importMatch[0].replace(importMatch[1], ` ${importMatch[1].trim()}, useRef `))
-            }
-          }
-          else {
-            // 在第一行追加 import { useRef } from 'react'
-            code = `import { useRef } from 'react'\n${code}`
-          }
-          const space = useRefMatch[1]
-          const insertCode = `${space.replace('\n', '')}useEffect(() => {${space}  ${[
-            `const styleSheet = Array.from(document.styleSheets).find(sheet => sheet.ownerNode.getAttribute('react-v-bind'));`,
-            `const newStyleSheet = document.createElement('style');`,
-            `newStyleSheet.setAttribute('react-v-bind', 'true');`,
-            `if (styleSheet) {`,
-            `   if(styleSheet.ownerNode.innerHTML.includes('[v-bind-id="${fileNameHash}"]')) {`,
-            `     newStyleSheet.innerHTML = styleSheet.ownerNode.innerHTML.replace(/\\[v-bind-id="${fileNameHash}"\\] { [^}]+ }/, \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useRefMatch[2]}}; }\`);`,
-            `   }`,
-            `   else {`,
-            `     newStyleSheet.innerHTML += styleSheet.ownerNode.innerHTML + \`\n[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useRefMatch[2]}}; }\``,
-            `   }`,
-            `  document.head.removeChild(styleSheet.ownerNode);`,
-            `}`,
-            `else {`,
-            `   newStyleSheet.innerHTML = \`[v-bind-id="${fileNameHash}"] { --${vbind}: \${${useRefMatch[2]}}; }\``,
-            `}`,
-            `document.head.appendChild(newStyleSheet);`,
-            `}, [${useRefMatch[2]}.current])`,
-          ].join(`${space}  `)}`
 
-          code = code.replace(useRefMatch[0], `${useRefMatch[0]}\n${insertCode}`)
+          // const type = 'useRef'
+          // const dynamicUseRef_RE = new RegExp(`(\\s*)(?:const|let|var)\\s+(${vbind})\\s*=\\s*${type}\\([^\\)]*\\)`)
+          // const useRefMatch = code.match(dynamicUseRef_RE)
+          // if (!useRefMatch)
+          //   return
+          // code = generateInsertCode(code, vbind, fileNameHash, useRefMatch, type)
         }
       })
       const s = new MagicString(code)
