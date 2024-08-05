@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import CompA from '../components/compA.tsx'
 import CompB from '../components/compB.tsx'
+
 import './index.css'
+import './indexb.css'
 
 export default function () {
   const [_color, setColor] = useState<string>('red')

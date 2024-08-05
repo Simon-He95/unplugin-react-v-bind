@@ -9,7 +9,7 @@ import { hash } from './utils'
 
 // support for other css language ?🤔
 export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
-  const importCss_RE = /import\s+['"](.+\.css)['"]/
+  const importCss_RE = /import\s+['"]([./].+\.css)['"]/g /* 只处理相对路径的 css 文件 */
   const importReact_RE = /import\s+(?:\w+,\s*)?\{([^}]+)\}\s+from\s+['"]react["']/
   const needTransformedCssMap = new Set()
   return {
@@ -31,25 +31,27 @@ export const unpluginFactory: UnpluginFactory<Options | undefined> = () => {
         })
         return newCssContent
       }
-      const cssMatch = code.match(importCss_RE)
       const vbindMap = new Set<string>()
-      if (!cssMatch) {
-        return
+
+      for (const cssMatch of code.matchAll(importCss_RE)) {
+        const url = cssMatch[1]
+        const absoulteUrl = path.resolve(path.dirname(id), url)
+        const cssContent = await fsp.readFile(absoulteUrl, 'utf-8')
+        // 如果没使用 v-bind 语法,直接返回
+        if (!/v-bind\(/.test(cssContent))
+          continue
+
+        for (const cssMatch of cssContent.matchAll(/v-bind\(([^)]+)\)/g)) {
+          const [cssVar] = cssMatch[1].split(',')
+          vbindMap.add(cssVar)
+        }
+
+        needTransformedCssMap.add(absoulteUrl)
       }
 
-      const url = cssMatch[1]
-      const absoulteUrl = path.resolve(path.dirname(id), url)
-      const cssContent = await fsp.readFile(absoulteUrl, 'utf-8')
-      // 如果没使用 v-bind 语法,直接返回
-      if (!/v-bind\(/.test(cssContent))
+      if (vbindMap.size === 0)
         return
 
-      for (const cssMatch of cssContent.matchAll(/v-bind\(([^)]+)\)/g)) {
-        const [cssVar] = cssMatch[1].split(',')
-        vbindMap.add(cssVar)
-      }
-
-      needTransformedCssMap.add(absoulteUrl)
       // 注入 fileName 的 hash 值
       // 如果 return 顶层不是 Fragment, 则直接在后面注入, 否则要给 children 下的每一个元素注入
       const fileNameHash = hash(id)
